@@ -4,7 +4,7 @@
 require_once( dirname(__FILE__).'/raven/lib/Raven/Client.php' );
 require_once( dirname(__FILE__).'/raven/lib/Raven/Compat.php' );
 require_once( dirname(__FILE__).'/raven/lib/Raven/ErrorHandler.php' );
-require_once( dirname(__FILE__).'/raven/lib/Raven/StackTrace.php' );
+require_once( dirname(__FILE__).'/raven/lib/Raven/Stacktrace.php' );
 
 class WP_Raven_Client extends Raven_Client {
 	
