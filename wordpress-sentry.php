@@ -14,18 +14,15 @@ Raven_Autoloader::register();
 class WPSentry extends Raven_Client {
 	
 	function WPSentry() {
-		
-		if ( $_POST ) $this->saveOptions();
-		
+				
+		if ( is_admin() && $_POST ) $this->saveOptions();
 		add_action( 'admin_menu', array( $this, 'addOptionsPage' ));
-		
 		$this->settings = get_option('sentry-settings');
+		$this->setErrorReportingLevel();
+				
+		if ( !isset($this->settings['dsn']) ) return;
 		
-		$this->setErrorReportingLevel( $this->max_error_reporting_level );
-		
-		if ( !$this->dsn ) return;
-		
-		parent::__construct( $this->dsn );
+		parent::__construct( $this->settings['dsn'] );
 		
 		$this->setHandlers();
 		
@@ -54,8 +51,7 @@ class WPSentry extends Raven_Client {
 			);
 		
 		if ( array_key_exists( $level, $errorLevelMap ) )
-			$this->_max_error_reporting_level = $errorLevelMap[ $level ];
-			
+			$this->_max_error_reporting_level = $errorLevelMap[ $level ];			
 	}
 	
 	function addOptionsPage() {
@@ -81,4 +77,4 @@ class WPSentry extends Raven_Client {
 
 }
 
-add_action('init', create_function(null, '$wps = new WPSentry(); ') );
+add_action('plugins_loaded', create_function(null, '$wps = new WPSentry(); ') );

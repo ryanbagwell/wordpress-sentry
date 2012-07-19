@@ -30,7 +30,6 @@ class Raven_ErrorHandler
 		if ( $client->_max_error_reporting_level )
 			$this->max_error_reporting_level = $client->_max_error_reporting_level;
 			
-		var_dump( $this->max_error_reporting_level );
     }
 
     function handleException($e, $isError = false) {
@@ -43,10 +42,6 @@ class Raven_ErrorHandler
 
     function handleError($code, $message, $file='', $line=0, $context=array()) {
         
-		// 
-		// var_dump($code);
-		// die();
-
 		if ( $code >= $this->max_error_reporting_level )
 			return;
 
