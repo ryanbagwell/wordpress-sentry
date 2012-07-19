@@ -29,6 +29,7 @@
 							<option value="E_RECOVERABLE_ERROR" <?php echo ($reporting_level == 'E_RECOVERABLE_ERROR') ? 'selected="selected"' : '';?>>Recoverable Errors</option>
 							<option value="E_ALL" <?php echo ($reporting_level == 'E_ALL') ? 'selected="selected"' : '';?>>All Errors</option>
 						</select>
+						 ("User Notices" is recommended)
 					</td>
 				</tr>				
 			</tbody>
