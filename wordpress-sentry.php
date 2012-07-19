@@ -7,8 +7,7 @@ Author: Ryan Bagwell
 Version: 1
 Author URI: http://www.ryanbagwell.com
 */
-require_once( dirname(__FILE__).'/raven/lib/Raven/Autoloader.php' );
-Raven_Autoloader::register();
+
 require_once( dirname(__FILE__).'/class.wp-raven-client.php' );
 
 class WPSentry extends WP_Raven_Client {
