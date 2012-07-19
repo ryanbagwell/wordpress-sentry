@@ -12,8 +12,9 @@ class WP_Raven_Client extends Raven_Client {
 		
 		$this->settings = get_option( 'sentry-settings' );
 		
-		if ( !isset( $this->settings['dsn'] )) 
-			return;
+		if ( !isset( $this->settings['dsn'] )) return;
+		
+		if ( $this->settings['dsn'] == '' ) return;
 		
 		parent::__construct( $this->settings['dsn'] );
 		
