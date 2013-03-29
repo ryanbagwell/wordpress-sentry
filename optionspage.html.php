@@ -1,8 +1,8 @@
 <div class="wrap">
 	<h2>Sentry Error Reporting Settings</h2>
-	
+
 	<form action="" method="post">
-		
+
 		<table class="form-table">
 			<tbody>
 				<tr valign="top">
@@ -13,7 +13,7 @@
 						<input name="sentry_dsn" type="text" id="sentry-dsn" value="<?php echo $dsn; ?>" class="regular-text">
 					</td>
 				</tr>
-				
+
 				<tr valign="top">
 					<th scope="row">
 						<label for="sentry_dsn">Error Reporting Level</label>
@@ -31,14 +31,14 @@
 						</select>
 						 ("User Notices" is recommended)
 					</td>
-				</tr>				
+				</tr>
 			</tbody>
 		</table>
-		
+
 		<p class="submit">
 			<input type="submit" name="submit" id="submit" class="button-primary" value="Save Changes">
 		</p>
 
 	</form>
-	
+
 </div>
