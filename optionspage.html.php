@@ -20,14 +20,9 @@
 					</th>
 					<td>
 						<select name="sentry_reporting_level">
-							<option value="E_NONE" <?php echo ($reporting_level == 'E_NONE') ? 'selected="selected"' : '';?>>None</option>
-							<option value="E_WARNING" <?php echo ($reporting_level == 'E_WARNING') ? 'selected="selected"' : '';?>>Warnings</option>
-							<option value="E_NOTICE" <?php echo ($reporting_level == 'E_NOTICE') ? 'selected="selected"' : '';?>>Notices</option>
-							<option value="E_USER_ERROR" <?php echo ($reporting_level == 'E_USER_ERROR') ? 'selected="selected"' : '';?>>User Errors</option>
-							<option value="E_USER_WARNING" <?php echo ($reporting_level == 'E_USER_WARNING') ? 'selected="selected"' : '';?>>User Warnings</option>
-							<option value="E_USER_NOTICE" <?php echo ($reporting_level == 'E_USER_NOTICE') ? 'selected="selected"' : '';?>>User Notices</option>
-							<option value="E_RECOVERABLE_ERROR" <?php echo ($reporting_level == 'E_RECOVERABLE_ERROR') ? 'selected="selected"' : '';?>>Recoverable Errors</option>
-							<option value="E_ALL" <?php echo ($reporting_level == 'E_ALL') ? 'selected="selected"' : '';?>>All Errors</option>
+							<?php foreach ($error_levels as $level => $int): ?>
+							<option value="<?php echo $level; ?>" <?php echo ($reporting_level == $level) ? 'selected="selected"' : '';?>><?php echo $level; ?></option>
+							<?php endforeach; ?>
 						</select>
 						 ("User Notices" is recommended)
 					</td>

@@ -9,6 +9,18 @@ class WP_Raven_Client extends Raven_Client {
 
 	function __construct() {
 
+		$this->errorLevelMap = array(
+			'E_NONE' => 0,
+			'E_ERROR' => 1,
+			'E_WARNING' => 2,
+			'E_PARSE' => 4,
+			'E_NOTICE' => 8,
+			'E_USER_ERROR' => 256,
+			'E_USER_WARNING' => 512,
+			'E_USER_NOTICE' => 1024,
+			'E_RECOVERABLE_ERROR' => 4096,
+			'E_ALL' => 8191);
+
 		$this->settings = get_option( 'sentry-settings' );
 
 		if ( !isset( $this->settings['dsn'] )) return;
@@ -32,25 +44,13 @@ class WP_Raven_Client extends Raven_Client {
 
 	function setErrorReportingLevel( $level = 'E_ERROR' ) {
 
-		$errorLevelMap = array(
-			'E_NONE' => 0,
-			'E_ERROR' => 1,
-			'E_WARNING' => 2,
-			'E_PARSE' => 4,
-			'E_NOTICE' => 8,
-			'E_USER_ERROR' => 256,
-			'E_USER_WARNING' => 512,
-			'E_USER_NOTICE' => 1024,
-			'E_RECOVERABLE_ERROR' => 4096,
-			'E_ALL' => 8191);
-
 		try {
 
-			$this->_max_error_reporting_level = $errorLevelMap[$level];
+			$this->_max_error_reporting_level = $this->errorLevelMap[$level];
 
 		} catch(Exception $e) {
 
-			$this->_max_error_reporting_level = $errorLevelMap[$level];
+			$this->_max_error_reporting_level = $this->errorLevelMap[$level];
 
 		}
 

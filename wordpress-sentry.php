@@ -29,6 +29,7 @@ class WPSentry extends WP_Raven_Client {
 
 	function printOptionsHTML() {
 		extract( $this->settings );
+		$error_levels = $this->errorLevelMap;
 		require_once( dirname(__FILE__).'/optionspage.html.php' );
 	}
 
