@@ -10,7 +10,7 @@
 						<label for="sentry_dsn">Sentry DSN</label>
 					</th>
 					<td>
-						<input name="sentry_dsn" type="text" id="sentry-dsn" value="<?php echo $dsn; ?>" class="regular-text">
+						<input name="sentry_dsn" type="text" id="sentry-dsn" value="<?php echo $settings['dsn']; ?>" class="regular-text">
 					</td>
 				</tr>
 
@@ -21,7 +21,7 @@
 					<td>
 						<select name="sentry_reporting_level">
 							<?php foreach ($error_levels as $level => $int): ?>
-							<option value="<?php echo $level; ?>" <?php echo ($reporting_level == $level) ? 'selected="selected"' : '';?>><?php echo $level; ?></option>
+							<option value="<?php echo $level; ?>" <?php echo ($settings['reporting_level'] == $level) ? 'selected="selected"' : '';?>><?php echo $level; ?></option>
 							<?php endforeach; ?>
 						</select>
 						 ("User Notices" is recommended)
