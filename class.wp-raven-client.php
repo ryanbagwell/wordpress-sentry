@@ -3,6 +3,7 @@
 require_once( dirname(__FILE__) . '/raven/lib/Raven/Util.php' );
 require_once( dirname(__FILE__) . '/raven/lib/Raven/Processor.php' );
 require_once( dirname(__FILE__) . '/raven/lib/Raven/SanitizeDataProcessor.php' );
+require_once( dirname(__FILE__) . '/raven/lib/Raven/Serializer.php' );
 require_once( dirname(__FILE__) . '/raven/lib/Raven/Client.php' );
 require_once( dirname(__FILE__) . '/raven/lib/Raven/Compat.php' );
 require_once( dirname(__FILE__) . '/raven/lib/Raven/ErrorHandler.php' );
