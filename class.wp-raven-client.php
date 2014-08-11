@@ -1,13 +1,7 @@
 <?php
 
-require_once( dirname(__FILE__) . '/raven/lib/Raven/Util.php' );
-require_once( dirname(__FILE__) . '/raven/lib/Raven/Processor.php' );
-require_once( dirname(__FILE__) . '/raven/lib/Raven/SanitizeDataProcessor.php' );
-require_once( dirname(__FILE__) . '/raven/lib/Raven/Serializer.php' );
-require_once( dirname(__FILE__) . '/raven/lib/Raven/Client.php' );
-require_once( dirname(__FILE__) . '/raven/lib/Raven/Compat.php' );
-require_once( dirname(__FILE__) . '/raven/lib/Raven/ErrorHandler.php' );
-require_once( dirname(__FILE__) . '/raven/lib/Raven/Stacktrace.php' );
+require_once dirname(__FILE__) . '/raven/lib/Raven/Autoloader.php';
+Raven_Autoloader::register();
 
 class WP_Raven_Client extends Raven_Client {
 
