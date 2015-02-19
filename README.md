@@ -1,4 +1,4 @@
 wordpress-sentry
 ================
 
-A WordpRess plugin to handle reporting php error to Django's Sentry
+A WordPress plugin to handle reporting php error to the [Sentry error reporting system](https://getsentry.com/welcome/).
