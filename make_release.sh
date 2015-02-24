@@ -5,11 +5,12 @@ read -p "Version:" version
 echo $version
 
 rm -rf /tmp/getsentry-client-svn
+
 svn co http://plugins.svn.wordpress.org/getsentry-client/ /tmp/getsentry-client-svn
 
 echo "Copying files to trunk"
 
-git ls-tree -r --name-only HEAD | xargs -t -I file rsync -R file /tmp/getsentry-client-svn/trunk/
+git ls-tree -r --name-only HEAD | xargs -t -I file rsync -R --exclude 'make_release.sh' file /tmp/getsentry-client-svn/trunk/
 
 cd /tmp/getsentry-client-svn/
 
