@@ -16,7 +16,7 @@
 
 class Raven_Client
 {
-    const VERSION = '0.9.0';
+    const VERSION = '0.10.0';
     const PROTOCOL = '5';
 
     const DEBUG = 'debug';
@@ -25,6 +25,8 @@ class Raven_Client
     const WARNING = 'warning';
     const ERROR = 'error';
     const FATAL = 'fatal';
+
+    const MESSAGE_LIMIT = 1024;
 
     var $severity_map;
     var $extra_data;
@@ -58,19 +60,20 @@ class Raven_Client
         $this->tags = Raven_Util::get($options, 'tags', array());
         $this->trace = (bool) Raven_Util::get($options, 'trace', true);
         $this->timeout = Raven_Util::get($options, 'timeout', 2);
+        $this->message_limit = Raven_Util::get($options, 'message_limit', self::MESSAGE_LIMIT);
         $this->exclude = Raven_Util::get($options, 'exclude', array());
         $this->severity_map = NULL;
         $this->shift_vars = (bool) Raven_Util::get($options, 'shift_vars', true);
         $this->http_proxy = Raven_Util::get($options, 'http_proxy');
         $this->extra_data = Raven_Util::get($options, 'extra', array());
         $this->send_callback = Raven_Util::get($options, 'send_callback', null);
-        $this->curl_method = Raven_Util::get($options, 'curl_method', 'async');
+        $this->curl_method = Raven_Util::get($options, 'curl_method', 'sync');
         $this->curl_path = Raven_Util::get($options, 'curl_path', 'curl');
+        $this->curl_ipv4 = Raven_util::get($options, 'curl_ipv4', true);
+        $this->ca_cert = Raven_util::get($options, 'ca_cert', $this->get_default_ca_cert());
+		$this->curl_ssl_version = Raven_Util::get($options, 'curl_ssl_version');
 
-        $this->processors = array();
-        foreach (Raven_util::get($options, 'processors', self::getDefaultProcessors()) as $processor) {
-            $this->processors[] = new $processor($this);
-        }
+        $this->processors = $this->setProcessorsFromOptions($options);
 
         $this->_lasterror = null;
         $this->_user = null;
@@ -89,7 +92,32 @@ class Raven_Client
     }
 
     /**
+     * Sets the Raven_Processor sub-classes to be used when data is processed before being
+     * sent to Sentry.
+     *
+     * @param $options
+     * @return array
+     */
+    public function setProcessorsFromOptions($options){
+        $processors = array();
+        foreach (Raven_util::get($options, 'processors', self::getDefaultProcessors()) as $processor) {
+            $new_processor = new $processor($this);
+
+            if( isset($options['processorOptions']) && is_array($options['processorOptions']) ){
+                if( isset($options['processorOptions'][$processor]) && method_exists($processor, 'setProcessorOptions') ){
+                    $new_processor->setProcessorOptions($options['processorOptions'][$processor]);
+                }
+            }
+            $processors[] = $new_processor;
+        }
+        return $processors;
+    }
+
+    /**
      * Parses a Raven-compatible DSN and returns an array of its values.
+     *
+     * @param string    $dsn    Raven compatible DSN: http://raven.readthedocs.org/en/latest/config/#the-sentry-dsn
+     * @return array            parsed DSN
      */
     public static function parseDSN($dsn)
     {
@@ -215,7 +243,7 @@ class Raven_Client
         // TODO(dcramer): DRY this up
         $message = $exception->getMessage();
         if (empty($message)) {
-            $message = '<unknown exception>';
+            $message = get_class($exception);
         }
 
         $exc = $exception;
@@ -244,7 +272,9 @@ class Raven_Client
             }
 
             $exc_data['stacktrace'] = array(
-                'frames' => Raven_Stacktrace::get_stack_info($trace, $this->trace, $this->shift_vars, $vars),
+                'frames' => Raven_Stacktrace::get_stack_info(
+                    $trace, $this->trace, $this->shift_vars, $vars, $this->message_limit
+                ),
             );
 
             $exceptions[] = $exc_data;
@@ -382,7 +412,7 @@ class Raven_Client
         if (!isset($data['event_id'])) $data['event_id'] = $this->uuid4();
 
         if (isset($data['message'])) {
-            $data['message'] = substr($data['message'], 0, 1024);
+            $data['message'] = substr($data['message'], 0, $this->message_limit);
         }
 
         $data = array_merge($this->get_default_data(), $data);
@@ -418,7 +448,9 @@ class Raven_Client
 
             if (!isset($data['sentry.interfaces.Stacktrace'])) {
                 $data['sentry.interfaces.Stacktrace'] = array(
-                    'frames' => Raven_Stacktrace::get_stack_info($stack, $this->trace, $this->shift_vars, $vars),
+                    'frames' => Raven_Stacktrace::get_stack_info(
+                        $stack, $this->trace, $this->shift_vars, $vars, $this->message_limit
+                    ),
                 );
             }
         }
@@ -448,6 +480,11 @@ class Raven_Client
         $data = Raven_Serializer::serialize($data);
     }
 
+    /**
+     * Process data through all defined Raven_Processor sub-classes
+     *
+     * @param array     $data       Associative array of data to log
+     */
     public function process(&$data)
     {
         foreach ($this->processors as $processor) {
@@ -468,6 +505,11 @@ class Raven_Client
         }
     }
 
+    /**
+     * Wrapper to handle encoding and sending data to all defined Sentry servers
+     *
+     * @param array     $data       Associative array of data to log
+     */
     public function send($data)
     {
         if (is_callable($this->send_callback) && !call_user_func($this->send_callback, $data)) {
@@ -501,17 +543,33 @@ class Raven_Client
         }
     }
 
+    /**
+     * Send data to Sentry
+     *
+     * @param string    $url        Full URL to Sentry
+     * @param array     $data       Associative array of data to log
+     * @param array     $headers    Associative array of headers
+     */
     private function send_remote($url, $data, $headers=array())
     {
         $parts = parse_url($url);
         $parts['netloc'] = $parts['host'].(isset($parts['port']) ? ':'.$parts['port'] : null);
 
-        if ($parts['scheme'] === 'udp')
-            return $this->send_udp($parts['netloc'], $data, $headers['X-Sentry-Auth']);
-
-        return $this->send_http($url, $data, $headers);
+        if ($parts['scheme'] === 'udp') {
+            $this->send_udp($parts['netloc'], $data, $headers['X-Sentry-Auth']);
+        }
+        else {
+            $this->send_http($url, $data, $headers);
+        }
     }
 
+    /**
+     * Send data to Sentry via udp socket
+     *
+     * @param string    $netloc     host:port || host
+     * @param array     $data       Associative array of data to log
+     * @param array     $headers    Associative array of headers
+     */
     private function send_udp($netloc, $data, $headers)
     {
         list($host, $port) = explode(':', $netloc);
@@ -520,18 +578,29 @@ class Raven_Client
         $sock = socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
         socket_sendto($sock, $raw_data, strlen($raw_data), 0, $host, $port);
         socket_close($sock);
-
-        return true;
     }
 
-    private function get_curl_options(){
+    protected function get_default_ca_cert() {
+        return dirname(__FILE__) . DIRECTORY_SEPARATOR . 'data' . DIRECTORY_SEPARATOR . 'cacert.pem';
+    }
+
+    protected function get_curl_options()
+    {
         $options = array(
             CURLOPT_VERBOSE => false,
             CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_CAINFO => $this->ca_cert,
+            CURLOPT_USERAGENT => 'raven-php/' . self::VERSION,
         );
         if ($this->http_proxy) {
             $options[CURLOPT_PROXY] = $this->http_proxy;
+        }
+        if ($this->curl_ssl_version) {
+	        $options[CURLOPT_SSLVERSION] = $this->curl_ssl_version;
+        }
+        if ($this->curl_ipv4) {
+            $options[CURLOPT_IPRESOLVE] = CURL_IPRESOLVE_V4;
         }
         if (defined('CURLOPT_TIMEOUT_MS')) {
             // MS is available in curl >= 7.16.2
@@ -549,6 +618,10 @@ class Raven_Client
 
     /**
      * Send the message over http to the sentry url given
+     *
+     * @param string $url       URL of the Sentry instance to log to
+     * @param array $data       Associative array of data to log
+     * @param array $headers    Associative array of headers
      */
     private function send_http($url, $data, $headers=array())
     {
@@ -561,7 +634,16 @@ class Raven_Client
         }
     }
 
+    /**
+     * Send the cURL to Sentry asynchronously. No errors will be returned from cURL
+     *
+     * @param string    $url        URL of the Sentry instance to log to
+     * @param array     $data       Associative array of data to log
+     * @param array     $headers    Associative array of headers
+     * @return bool
+     */
     private function send_http_asynchronous_curl_exec($url, $data, $headers) {
+        // TODO(dcramer): support ca_cert
         $cmd = $this->curl_path.' -X POST ';
         foreach ($headers as $key => $value) {
             $cmd .= '-H \''. $key. ': '. $value. '\' ';
@@ -576,6 +658,14 @@ class Raven_Client
         return true; // The exec method is just fire and forget, so just assume it always works
     }
 
+    /**
+     * Send a blocking cURL to Sentry and check for errors from cURL
+     *
+     * @param string    $url        URL of the Sentry instance to log to
+     * @param array     $data       Associative array of data to log
+     * @param array     $headers    Associative array of headers
+     * @return bool
+     */
     private function send_http_synchronous($url, $data, $headers)
     {
         $new_headers = array();
@@ -590,9 +680,19 @@ class Raven_Client
         curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
 
         $options = $this->get_curl_options();
+        $ca_cert = $options[CURLOPT_CAINFO];
+        unset($options[CURLOPT_CAINFO]);
         curl_setopt_array($curl, $options);
 
         curl_exec($curl);
+
+        $errno = curl_errno($curl);
+        // CURLE_SSL_CACERT || CURLE_SSL_CACERT_BADFILE
+        if ($errno == 60 || $errno == 77) {
+            curl_setopt($curl, CURLOPT_CAINFO, $ca_cert);
+            curl_exec($curl);
+        }
+
         $code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
         $success = ($code == 200);
         if (!$success) {
@@ -606,6 +706,15 @@ class Raven_Client
         return $success;
     }
 
+    /**
+     * Generate a Sentry authorization header string
+     *
+     * @param string    $timestamp      Timestamp when the event occurred
+     * @param string    $client         HTTP client name (not Raven_Client object)
+     * @param string    $api_key        Sentry API key
+     * @param string    $secret_key     Sentry API key
+     * @return string
+     */
     protected function get_auth_header($timestamp, $client, $api_key, $secret_key)
     {
         $header = array(
@@ -628,6 +737,8 @@ class Raven_Client
 
     /**
      * Generate an uuid4 value
+     *
+     * @return string
      */
     private function uuid4()
     {
@@ -656,6 +767,8 @@ class Raven_Client
 
     /**
      * Return the URL for the current request
+     *
+     * @return string|null
      */
     private function get_current_url()
     {
@@ -670,6 +783,12 @@ class Raven_Client
         return $schema . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
     }
 
+    /**
+     * Get the value of a key from $_SERVER
+     *
+     * @param string $key       Key whose value you wish to obtain
+     * @return string           Key's value
+     */
     private function _server_variable($key)
     {
         if (isset($_SERVER[$key])) {
@@ -679,6 +798,12 @@ class Raven_Client
         return '';
     }
 
+    /**
+     * Translate a PHP Error constant into a Sentry log level group
+     *
+     * @param string $severity  PHP E_$x error constant
+     * @return string           Sentry log level group
+     */
     public function translateSeverity($severity) {
         if (is_array($this->severity_map) && isset($this->severity_map[$severity])) {
             return $this->severity_map[$severity];
@@ -707,10 +832,23 @@ class Raven_Client
         return Raven_Client::ERROR;
     }
 
+    /**
+     * Provide a map of PHP Error constants to Sentry logging groups to use instead
+     * of the defaults in translateSeverity()
+     *
+     * @param array $map
+     */
     public function registerSeverityMap($map) {
         $this->severity_map = $map;
     }
 
+    /**
+     * Convenience function for setting a user's ID and Email
+     *
+     * @param string $id            User's ID
+     * @param string|null $email    User's email
+     * @param array $data           Additional user data
+     */
     public function set_user_data($id, $email=null, $data=array()) {
         $this->user_context(array_merge(array(
             'id'    => $id,
@@ -720,6 +858,8 @@ class Raven_Client
 
     /**
      * Sets user context.
+     *
+     * @param array $data   Associative array of user data
      */
     public function user_context($data) {
         $this->context->user = $data;
@@ -727,6 +867,8 @@ class Raven_Client
 
     /**
      * Appends tags context.
+     *
+     * @param array $data   Associative array of tags
      */
     public function tags_context($data) {
         $this->context->tags = array_merge($this->context->tags, $data);
@@ -734,10 +876,17 @@ class Raven_Client
 
     /**
      * Appends additional context.
+     *
+     * @param array $data   Associative array of extra data
      */
     public function extra_context($data) {
         $this->context->extra = array_merge($this->context->extra, $data);
     }
 
-
+    /**
+     * @param array $processors
+     */
+    public function setProcessors(array $processors){
+        $this->processors = $processors;
+    }
 }

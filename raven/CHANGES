@@ -1,3 +1,16 @@
+0.10.0
+------
+
+- Added a default certificate bundle which includes common root CA's
+  as well as getsentry.com's CA.
+
+0.9.1
+-----
+
+- Change default curl connection to 'sync'
+- Improve CLI reporting
+
+
 0.9.0
 -----
 
