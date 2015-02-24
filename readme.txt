@@ -4,7 +4,7 @@ Donate link: https://www.paypal.com/us/cgi-bin/webscr?cmd=_flow&SESSION=WW3LiAp4
 Tags: sentry, logging, diagnostics, debugging
 Requires at least: 3.0.1
 Tested up to: 3.4
-Stable tag: 4.3
+Stable tag: 0.1
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -20,7 +20,12 @@ A plugin that sends error messages to the [Sentry error logging system](https://
 2. Activate the plugin through the 'Plugins' menu in WordPress.
 3. In Settings > Sentry, add your Sentry DSN and set the error reporting threshold level.
 
-== Changelog ==
+== Bug reports and support ==
 
-= 1.0 =
+To report bugs and get help, see the [official github repository](https://github.com/ryanbagwell/wordpress-sentry/issues).
+
+== Changelog ==
+= 0.1 =
+
 * Added first release.
+
