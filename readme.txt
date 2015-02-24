@@ -4,7 +4,7 @@ Donate link: https://www.paypal.com/us/cgi-bin/webscr?cmd=_flow&SESSION=WW3LiAp4
 Tags: sentry, logging, diagnostics, debugging
 Requires at least: 3.0.1
 Tested up to: 3.4
-Stable tag: 0.1
+Stable tag: 0.2
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -28,4 +28,10 @@ To report bugs and get help, see the [official github repository](https://github
 = 0.1 =
 
 * Added first release.
+
+= 0.1 =
+
+* Updated Raven PHP Client
+
+
 
