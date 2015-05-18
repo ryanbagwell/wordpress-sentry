@@ -7,6 +7,8 @@ Tested up to: 3.4
 Stable tag: 0.2
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
+GitHub Plugin URI: https://github.com/ryanbagwell/wordpress-sentry
+GitHub Branch: master
 
 A plugin that sends error messages to the Sentry error logging system.
 
