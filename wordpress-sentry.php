@@ -23,7 +23,7 @@ class WPSentry extends WP_Raven_Client {
 	}
 
 	public function addOptionsPage() {
-		add_options_page('Sentry Error Reporting Settings', 'Sentry', 8, 'sentrysettings', array($this, 'printOptionsHTML'));
+		add_options_page('Sentry Error Reporting Settings', 'Sentry', 'edit_pages', 'sentrysettings', array($this, 'printOptionsHTML'));
 	}
 
 	public function printOptionsHTML() {
