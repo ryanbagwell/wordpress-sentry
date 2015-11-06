@@ -46,6 +46,7 @@ class WP_Raven_Client extends Raven_Client {
 		$error_handler = new Raven_ErrorHandler($this);
 		set_error_handler(array($error_handler, 'handleError'));
 		set_exception_handler(array($error_handler, 'handleException'));
+		$error_handler->registerShutdownFunction();
 	}
 
 	private function setErrorReportingLevel($level = 'E_ERROR') {
