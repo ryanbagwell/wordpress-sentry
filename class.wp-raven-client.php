@@ -44,16 +44,14 @@ class WP_Raven_Client extends Raven_Client {
 
 	private function setHandlers() {
 		$error_handler = new Raven_ErrorHandler($this);
-		set_error_handler(array($error_handler, 'handleError'));
-		set_exception_handler(array($error_handler, 'handleException'));
+		$error_handler->registerErrorHandler();
+		$error_handler->registerExceptionHandler();
+		$error_handler->registerShutdownFunction();
 	}
 
-	private function setErrorReportingLevel($level = 'E_ERROR') {
-		try {
-			$this->_max_error_reporting_level = $this->errorLevelMap[$level];
-		} catch (Exception $e) {
-			$this->_max_error_reporting_level = $this->errorLevelMap[$level];
-		}
+	private function setErrorReportingLevel($level = 'E_ERROR')
+	{
+		error_reporting($this->errorLevelMap[$level]);
 	}
 
 }
