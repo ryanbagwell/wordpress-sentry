@@ -27,6 +27,7 @@ A plugin that sends error messages to the [Sentry error logging system](https://
 To report bugs and get help, see the [official github repository](https://github.com/ryanbagwell/wordpress-sentry/issues).
 
 == Changelog ==
+
 = 0.3 =
 
 * Now registering php error handlers with Raven client to improve error reporting.
@@ -38,6 +39,10 @@ To report bugs and get help, see the [official github repository](https://github
 = 0.1 =
 
 * Added first release.
+
+== Contributors ==
+
+vbartusevicius (https://github.com/vbartusevicius)
 
 
 
