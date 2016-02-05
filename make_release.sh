@@ -1,8 +1,8 @@
 #!/bin/bash
 
-read -p "Version:" version
+GIT_LATEST="$(git describe --abbrev=0 --tags)"
 
-echo $version
+read -p "Specify a version (ex: 0.3) - latest git tag is ${GIT_LATEST}:" version
 
 rm -rf /tmp/getsentry-client-svn
 

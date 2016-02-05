@@ -28,6 +28,14 @@ To report bugs and get help, see the [official github repository](https://github
 
 == Changelog ==
 
+= 0.5 =
+
+* Bump version to correct errant stable version number
+
+= 0.4 =
+
+* Bump version to sync with wordpress.org plugins page
+
 = 0.3 =
 
 * Now registering php error handlers with Raven client to improve error reporting.
