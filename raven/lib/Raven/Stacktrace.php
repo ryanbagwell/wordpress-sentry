@@ -14,7 +14,8 @@ class Raven_Stacktrace
     );
 
     public static function get_stack_info($frames, $trace = false, $shiftvars = true, $errcontext = null,
-                            $frame_var_limit = Raven_Client::MESSAGE_LIMIT)
+                                          $frame_var_limit = Raven_Client::MESSAGE_LIMIT, $strip_prefixes = null,
+                                          $app_path = null)
     {
         /**
          * PHP's way of storing backstacks seems bass-ackwards to me
@@ -53,10 +54,12 @@ class Raven_Stacktrace
             } else {
                 $context = self::read_source_file($frame['file'], $frame['line']);
                 $abs_path = $frame['file'];
-                $filename = basename($frame['file']);
             }
 
-            $module = $filename;
+            // strip base path if present
+            $context['filename'] = self::strip_prefixes($context['filename'], $strip_prefixes);
+
+            $module = basename($abs_path);
             if (isset($nextframe['class'])) {
                 $module .= ':' . $nextframe['class'];
             }
@@ -76,8 +79,10 @@ class Raven_Stacktrace
                 }
             }
 
-            $frame = array(
-                'abs_path' => $abs_path,
+            $data = array(
+                // abs_path isn't overly useful, wastes space, and exposes
+                // filesystem internals
+                // 'abs_path' => $abs_path,
                 'filename' => $context['filename'],
                 'lineno' => (int) $context['lineno'],
                 'module' => $module,
@@ -86,18 +91,29 @@ class Raven_Stacktrace
                 'context_line' => $context['line'],
                 'post_context' => $context['suffix'],
             );
+
+            // detect in_app based on app path
+            if ($app_path) {
+                $data['in_app'] = (bool)(substr($abs_path, 0, strlen($app_path)) === $app_path);
+            }
+
             // dont set this as an empty array as PHP will treat it as a numeric array
             // instead of a mapping which goes against the defined Sentry spec
             if (!empty($vars)) {
+                $serializer = new Raven_ReprSerializer();
+                $cleanVars = array();
                 foreach ($vars as $key => $value) {
+                    $value = $serializer->serialize($value);
                     if (is_string($value) || is_numeric($value)) {
-                        $vars[$key] = substr($value, 0, $frame_var_limit);
+                        $cleanVars[$key] = substr($value, 0, $frame_var_limit);
+                    } else {
+                        $cleanVars[$key] = $value;
                     }
                 }
-                $frame['vars'] = $vars;
+                $data['vars'] = $cleanVars;
             }
 
-            $result[] = $frame;
+            $result[] = $data;
         }
 
         return array_reverse($result);
@@ -116,7 +132,6 @@ class Raven_Stacktrace
             $i++;
         }
         return $args;
-
     }
 
     public static function get_frame_context($frame, $frame_arg_limit = Raven_Client::MESSAGE_LIMIT)
@@ -149,16 +164,20 @@ class Raven_Stacktrace
                 return array($frame['args'][0]);
             }
         }
-        if (isset($frame['class'])) {
-            if (method_exists($frame['class'], $frame['function'])) {
-                $reflection = new ReflectionMethod($frame['class'], $frame['function']);
-            } elseif ($frame['type'] === '::') {
-                $reflection = new ReflectionMethod($frame['class'], '__callStatic');
+        try {
+            if (isset($frame['class'])) {
+                if (method_exists($frame['class'], $frame['function'])) {
+                    $reflection = new ReflectionMethod($frame['class'], $frame['function']);
+                } elseif ($frame['type'] === '::') {
+                    $reflection = new ReflectionMethod($frame['class'], '__callStatic');
+                } else {
+                    $reflection = new ReflectionMethod($frame['class'], '__call');
+                }
             } else {
-                $reflection = new ReflectionMethod($frame['class'], '__call');
+                $reflection = new ReflectionFunction($frame['function']);
             }
-        } else {
-            $reflection = new ReflectionFunction($frame['function']);
+        } catch (ReflectionException $e) {
+            return array();
         }
 
         $params = $reflection->getParameters();
@@ -168,11 +187,11 @@ class Raven_Stacktrace
             if (isset($params[$i])) {
                 // Assign the argument by the parameter name
                 if (is_array($arg)) {
-                  foreach ($arg as $key => $value) {
-                    if (is_string($value) || is_numeric($value)) {
-                      $arg[$key] = substr($value, 0, $frame_arg_limit);
+                    foreach ($arg as $key => $value) {
+                        if (is_string($value) || is_numeric($value)) {
+                            $arg[$key] = substr($value, 0, $frame_arg_limit);
+                        }
                     }
-                  }
                 }
                 $args[$params[$i]->name] = $arg;
             } else {
@@ -183,6 +202,19 @@ class Raven_Stacktrace
         }
 
         return $args;
+    }
+
+    private static function strip_prefixes($filename, $prefixes)
+    {
+        if ($prefixes === null) {
+            return;
+        }
+        foreach ($prefixes as $prefix) {
+            if (substr($filename, 0, strlen($prefix)) === $prefix) {
+                return substr($filename, strlen($prefix) + 1);
+            }
+        }
+        return $filename;
     }
 
     private static function read_source_file($filename, $lineno, $context_lines = 5)
@@ -239,7 +271,7 @@ class Raven_Stacktrace
                     break;
                 }
                 $file->next();
-             }
+            }
         } catch (RuntimeException $exc) {
             return $frame;
         }
