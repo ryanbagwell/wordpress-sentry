@@ -4,7 +4,7 @@ Donate link: https://www.paypal.com/us/cgi-bin/webscr?cmd=_flow&SESSION=WW3LiAp4
 Tags: sentry, logging, diagnostics, debugging
 Requires at least: 3.0.1
 Tested up to: 3.4
-Stable tag: 1.1
+Stable tag: 1.2
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 GitHub Plugin URI: https://github.com/ryanbagwell/wordpress-sentry
@@ -27,6 +27,10 @@ A plugin that sends error messages to the [Sentry error logging system](https://
 To report bugs and get help, see the [official github repository](https://github.com/ryanbagwell/wordpress-sentry/issues).
 
 == Changelog ==
+
+= 1.2 =
+
+Adding the ability to access the Raven client directly to send custom error messages to sentry. Merge PR from @wk8.
 
 = 1.1 =
 
