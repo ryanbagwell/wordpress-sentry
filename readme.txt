@@ -30,11 +30,11 @@ To report bugs and get help, see the [official github repository](https://github
 
 = 1.2 =
 
-Adding the ability to access the Raven client directly to send custom error messages to sentry. Merge PR from @wk8.
+* Adding the ability to access the Raven client directly to send custom error messages to sentry. Merge PR from @wk8.
 
 = 1.1 =
 
-Upgrade raven php client to v0.15.0
+* Upgrade raven php client to v0.15.0
 
 = 1.0 =
 
@@ -63,6 +63,8 @@ Upgrade raven php client to v0.15.0
 == Contributors ==
 
 vbartusevicius (https://github.com/vbartusevicius)
+wk8 (https://github.com/wk8)
+
 
 
 
