@@ -13,6 +13,8 @@ require_once( dirname(__FILE__) . '/class.wp-raven-client.php' );
 
 class WPSentry extends WP_Raven_Client {
 
+    private static $instance = null;
+
 	public function __construct() {
 		add_action('admin_menu', array($this, 'addOptionsPage'));
 
@@ -20,6 +22,8 @@ class WPSentry extends WP_Raven_Client {
 			$this->saveOptions();
 
 		parent::__construct();
+
+        static::$instance = $this;
 	}
 
 	public function addOptionsPage() {
@@ -54,6 +58,10 @@ class WPSentry extends WP_Raven_Client {
 			
 		}
 	}
+
+    public static function getInstance() {
+        return self::$instance;
+    }
 }
 
 add_action('plugins_loaded', array('WPSentry', 'load'));
