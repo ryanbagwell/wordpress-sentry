@@ -1,3 +1,52 @@
+0.15.0
+------
+
+- Fixed some cases where serialization wouldn't happen.
+- Added sdk attribute.
+
+0.14.0
+------
+
+- Added ``prefixes`` option for stripping absolute paths.
+- Removed ``abs_path`` from stacktraces.
+- Added ``app_path`` to specify application root for resolving ``in_app` on frames.
+- Moved Laravel support to ``sentry-laravel`` project.
+- Fixed duplicate stack computation.
+- Added ``dsn`` option to ease configuration.
+- Fixed an issue with the curl async transport.
+- Improved serialization of values.
+
+0.13.0
+------
+
+- Updated API to use new style interfaces.
+- Remove session cookie in default processor.
+- Expand docs for Laravel, Symfony2, and Monolog.
+- Default error types can now be set as part of ErrorHandler configuration.
+
+0.12.1
+------
+
+- Dont send empty values for various context.
+
+0.12.0
+------
+
+- Bumped protocol version to 6.
+- Fixed an issue with the async curl handler (GH-216).
+- Removed UDP transport.
+
+0.11.0
+------
+
+- New configuration parameter: 'release'
+- New configuration parameter: 'message_limit'
+- New configuration parameter: 'curl_ssl_version'
+- New configuration parameter: 'curl_ipv4'
+- New configuration parameter: 'verify_ssl'
+- Updated remote endpoint to use modern project-based path.
+- Expanded default sanitizer support to include 'auth_pw' attribute.
+
 0.10.0
 ------
 

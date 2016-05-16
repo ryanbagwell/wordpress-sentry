@@ -41,6 +41,16 @@ class Dummy_Raven_Client extends Raven_Client
     {
         return parent::get_user_data();
     }
+
+    /**
+     * Expose the current url method to test it
+     *
+     * @return string
+     */
+    public function test_get_current_url()
+    {
+        return $this->get_current_url();
+    }
 }
 
 class Raven_Tests_ClientTest extends PHPUnit_Framework_TestCase
@@ -72,7 +82,7 @@ class Raven_Tests_ClientTest extends PHPUnit_Framework_TestCase
         $result = Raven_Client::parseDsn('http://public:secret@example.com/1');
 
         $this->assertEquals($result['project'], 1);
-        $this->assertEquals($result['servers'], array('http://example.com/api/store/'));
+        $this->assertEquals($result['server'], 'http://example.com/api/1/store/');
         $this->assertEquals($result['public_key'], 'public');
         $this->assertEquals($result['secret_key'], 'secret');
     }
@@ -82,7 +92,7 @@ class Raven_Tests_ClientTest extends PHPUnit_Framework_TestCase
         $result = Raven_Client::parseDsn('https://public:secret@example.com/1');
 
         $this->assertEquals($result['project'], 1);
-        $this->assertEquals($result['servers'], array('https://example.com/api/store/'));
+        $this->assertEquals($result['server'], 'https://example.com/api/1/store/');
         $this->assertEquals($result['public_key'], 'public');
         $this->assertEquals($result['secret_key'], 'secret');
     }
@@ -92,7 +102,7 @@ class Raven_Tests_ClientTest extends PHPUnit_Framework_TestCase
         $result = Raven_Client::parseDsn('http://public:secret@example.com/app/1');
 
         $this->assertEquals($result['project'], 1);
-        $this->assertEquals($result['servers'], array('http://example.com/app/api/store/'));
+        $this->assertEquals($result['server'], 'http://example.com/app/api/1/store/');
         $this->assertEquals($result['public_key'], 'public');
         $this->assertEquals($result['secret_key'], 'secret');
     }
@@ -102,7 +112,7 @@ class Raven_Tests_ClientTest extends PHPUnit_Framework_TestCase
         $result = Raven_Client::parseDsn('http://public:secret@example.com:9000/app/1');
 
         $this->assertEquals($result['project'], 1);
-        $this->assertEquals($result['servers'], array('http://example.com:9000/app/api/store/'));
+        $this->assertEquals($result['server'], 'http://example.com:9000/app/api/1/store/');
         $this->assertEquals($result['public_key'], 'public');
         $this->assertEquals($result['secret_key'], 'secret');
     }
@@ -157,7 +167,7 @@ class Raven_Tests_ClientTest extends PHPUnit_Framework_TestCase
         $client = new Raven_Client('http://public:secret@example.com/1');
 
         $this->assertEquals($client->project, 1);
-        $this->assertEquals($client->servers, array('http://example.com/api/store/'));
+        $this->assertEquals($client->server, 'http://example.com/api/1/store/');
         $this->assertEquals($client->public_key, 'public');
         $this->assertEquals($client->secret_key, 'secret');
     }
@@ -169,7 +179,7 @@ class Raven_Tests_ClientTest extends PHPUnit_Framework_TestCase
         ));
 
         $this->assertEquals($client->project, 1);
-        $this->assertEquals($client->servers, array('http://example.com/api/store/'));
+        $this->assertEquals($client->server, 'http://example.com/api/1/store/');
         $this->assertEquals($client->public_key, 'public');
         $this->assertEquals($client->secret_key, 'secret');
         $this->assertEquals($client->site, 'foo');
@@ -178,21 +188,48 @@ class Raven_Tests_ClientTest extends PHPUnit_Framework_TestCase
     public function testOptionsFirstArgument()
     {
         $client = new Raven_Client(array(
-            'servers' => array('http://example.com/api/store/'),
+            'server' => 'http://example.com/api/1/store/',
+            'project' => 1,
         ));
 
-        $this->assertEquals($client->servers, array('http://example.com/api/store/'));
+        $this->assertEquals($client->server, 'http://example.com/api/1/store/');
+    }
+
+
+    public function testDsnInOptionsFirstArg()
+    {
+        $client = new Raven_Client(array(
+            'dsn' => 'http://public:secret@example.com/1',
+        ));
+
+        $this->assertEquals($client->project, 1);
+        $this->assertEquals($client->server, 'http://example.com/api/1/store/');
+        $this->assertEquals($client->public_key, 'public');
+        $this->assertEquals($client->secret_key, 'secret');
+    }
+
+    public function testDsnInOptionsSecondArg()
+    {
+        $client = new Raven_Client(null, array(
+            'dsn' => 'http://public:secret@example.com/1',
+        ));
+
+        $this->assertEquals($client->project, 1);
+        $this->assertEquals($client->server, 'http://example.com/api/1/store/');
+        $this->assertEquals($client->public_key, 'public');
+        $this->assertEquals($client->secret_key, 'secret');
     }
 
     public function testOptionsFirstArgumentWithOptions()
     {
         $client = new Raven_Client(array(
-            'servers' => array('http://example.com/api/store/'),
+            'server' => 'http://example.com/api/1/store/',
+            'project' => 1,
         ), array(
             'site' => 'foo',
         ));
 
-        $this->assertEquals($client->servers, array('http://example.com/api/store/'));
+        $this->assertEquals($client->server, 'http://example.com/api/1/store/');
         $this->assertEquals($client->site, 'foo');
     }
 
@@ -205,6 +242,17 @@ class Raven_Tests_ClientTest extends PHPUnit_Framework_TestCase
         $this->assertEquals(count($events), 1);
         $event = array_pop($events);
         $this->assertEquals($event['extra']['foo'], 'bar');
+    }
+
+    public function testEmptyExtraData()
+    {
+        $client = new Dummy_Raven_Client(array('extra' => array()));
+
+        $client->captureMessage('Test Message %s', array('foo'));
+        $events = $client->getSentEvents();
+        $this->assertEquals(count($events), 1);
+        $event = array_pop($events);
+        $this->assertEquals(array_key_exists('extra', $event), false);
     }
 
     public function testCaptureMessageDoesHandleUninterpolatedMessage()
@@ -280,7 +328,7 @@ class Raven_Tests_ClientTest extends PHPUnit_Framework_TestCase
         $this->assertEquals(count($events), 1);
         $event = array_pop($events);
 
-        $exc = $event['sentry.interfaces.Exception'];
+        $exc = $event['exception'];
         $this->assertEquals(count($exc['values']), 1);
         $this->assertEquals($exc['values'][0]['value'], 'Foo bar');
         $this->assertEquals($exc['values'][0]['type'], 'Exception');
@@ -313,14 +361,14 @@ class Raven_Tests_ClientTest extends PHPUnit_Framework_TestCase
         $this->assertEquals(count($events), 1);
         $event = array_pop($events);
 
-        $exc = $event['sentry.interfaces.Exception'];
+        $exc = $event['exception'];
         $this->assertEquals(count($exc['values']), 2);
         $this->assertEquals($exc['values'][0]['value'], 'Foo bar');
         $this->assertEquals($exc['values'][1]['value'], 'Child exc');
-
     }
 
-    public function testCaptureExceptionDifferentLevelsInChainedExceptionsBug() {
+    public function testCaptureExceptionDifferentLevelsInChainedExceptionsBug()
+    {
         if (version_compare(PHP_VERSION, '5.3.0', '<')) {
             $this->markTestSkipped('PHP 5.3 required for chained exceptions.');
         }
@@ -416,7 +464,8 @@ class Raven_Tests_ClientTest extends PHPUnit_Framework_TestCase
         $this->assertTrue(in_array('Raven_SanitizeDataProcessor', $defaults));
     }
 
-    public function testGetDefaultData() {
+    public function testGetDefaultData()
+    {
         $client = new Dummy_Raven_Client();
         $expected = array(
             'platform' => 'php',
@@ -425,6 +474,10 @@ class Raven_Tests_ClientTest extends PHPUnit_Framework_TestCase
             'site' => $client->site,
             'logger' => $client->logger,
             'tags' => $client->tags,
+            'sdk' => array(
+                'name' => 'sentry-php',
+                'version' => $client::VERSION,
+            ),
         );
         $this->assertEquals($expected, $client->get_default_data());
     }
@@ -442,8 +495,6 @@ class Raven_Tests_ClientTest extends PHPUnit_Framework_TestCase
             'HTTP_ACCEPT'         => 'text/html',
             'HTTP_ACCEPT_CHARSET' => 'utf-8',
             'HTTP_COOKIE'         => 'cupcake: strawberry',
-            'HTTP_CONTENT_TYPE'   => 'text/html',
-            'HTTP_CONTENT_LENGTH' => '1000',
             'SERVER_PORT'         => '443',
             'SERVER_PROTOCOL'     => 'HTTP/1.1',
             'REQUEST_METHOD'      => 'PATCH',
@@ -459,7 +510,7 @@ class Raven_Tests_ClientTest extends PHPUnit_Framework_TestCase
         );
 
         $expected = array(
-            'sentry.interfaces.Http' => array(
+            'request' => array(
                 'method' => 'PATCH',
                 'url' => 'https://getsentry.com/welcome/',
                 'query_string' => 'q=bitch&l=en',
@@ -493,7 +544,8 @@ class Raven_Tests_ClientTest extends PHPUnit_Framework_TestCase
         $this->assertEquals($expected, $client->get_http_data());
     }
 
-    public function testGetUserDataWithSetUser() {
+    public function testGetUserDataWithSetUser()
+    {
         $client = new Dummy_Raven_Client();
 
         $id = 'unique_id';
@@ -506,7 +558,7 @@ class Raven_Tests_ClientTest extends PHPUnit_Framework_TestCase
         $client->set_user_data($id, $email, $user);
 
         $expected = array(
-            'sentry.interfaces.User' => array(
+            'user' => array(
                 'id' => 'unique_id',
                 'username' => 'my_user',
                 'email' => 'foo@example.com',
@@ -516,28 +568,30 @@ class Raven_Tests_ClientTest extends PHPUnit_Framework_TestCase
         $this->assertEquals($expected, $client->get_user_data());
     }
 
-    public function testGetUserDataWithNoUser() {
+    public function testGetUserDataWithNoUser()
+    {
         $client = new Dummy_Raven_Client();
 
         $expected = array(
-            'sentry.interfaces.User' => array(
+            'user' => array(
                 'id' => session_id(),
             )
         );
         $this->assertEquals($expected, $client->get_user_data());
     }
 
-    public function testGetAuthHeader() {
+    public function testGetAuthHeader()
+    {
         $client = new Dummy_Raven_Client();
 
-        $clientstring = 'raven-php/test';
+        $clientstring = 'sentry-php/test';
         $timestamp = '1234341324.340000';
 
         $expected = "Sentry sentry_timestamp={$timestamp}, sentry_client={$clientstring}, " .
                     "sentry_version=" . Dummy_Raven_Client::PROTOCOL . ", " .
                     "sentry_key=publickey, sentry_secret=secretkey";
 
-        $this->assertEquals($expected, $client->get_auth_header($timestamp, 'raven-php/test', 'publickey', 'secretkey'));
+        $this->assertEquals($expected, $client->get_auth_header($timestamp, 'sentry-php/test', 'publickey', 'secretkey'));
     }
 
     public function testCaptureMessageWithUserContext()
@@ -552,7 +606,7 @@ class Raven_Tests_ClientTest extends PHPUnit_Framework_TestCase
         $event = array_pop($events);
         $this->assertEquals(array(
             'email' => 'foo@example.com',
-        ), $event['sentry.interfaces.User']);
+        ), $event['user']);
     }
 
     public function testCaptureMessageWithTagsContext()
@@ -591,19 +645,27 @@ class Raven_Tests_ClientTest extends PHPUnit_Framework_TestCase
         ), $event['extra']);
     }
 
-    public function cb1($data) {
+    public function testGetLastEventID()
+    {
+        $client = new Dummy_Raven_Client();
+        $client->capture(array('message' => 'test', 'event_id' => 'abc'));
+        $this->assertEquals($client->getLastEventID(), 'abc');
+    }
+
+    public function cb1($data)
+    {
         $this->assertEquals('test', $data['message']);
         return false;
     }
 
-    public function cb2($data) {
+    public function cb2($data)
+    {
         $this->assertEquals('test', $data['message']);
         return true;
     }
 
     public function testSendCallback()
     {
-
         $client = new Dummy_Raven_Client(array('send_callback' => array($this, 'cb1')));
         $client->captureMessage('test');
         $events = $client->getSentEvents();
@@ -613,5 +675,94 @@ class Raven_Tests_ClientTest extends PHPUnit_Framework_TestCase
         $client->captureMessage('test');
         $events = $client->getSentEvents();
         $this->assertEquals(1, count($events));
+    }
+
+    /**
+     * Set the server array to the test values, check the current url
+     *
+     * @dataProvider currentUrlProvider
+     * @param array $serverData
+     * @param array $options
+     * @param string $expected - the url expected
+     * @param string $message - fail message
+     */
+    public function testCurrentUrl($serverVars, $options, $expected, $message)
+    {
+        $_SERVER = $serverVars;
+
+        $client = new Dummy_Raven_Client($options);
+        $result = $client->test_get_current_url();
+
+        $this->assertSame($expected, $result, $message);
+    }
+
+    /**
+     * Arrays of:
+     *  $_SERVER data
+     *  config
+     *  expected url
+     *  Fail message
+     *
+     * @return array
+     */
+    public function currentUrlProvider()
+    {
+        return array(
+            array(
+                array(),
+                array(),
+                null,
+                'No url expected for empty REQUEST_URI'
+            ),
+            array(
+                array(
+                    'REQUEST_URI' => '/',
+                    'HTTP_HOST' => 'example.com',
+                ),
+                array(),
+                'http://example.com/',
+                'The url is expected to be http with the request uri'
+            ),
+            array(
+                array(
+                    'REQUEST_URI' => '/',
+                    'HTTP_HOST' => 'example.com',
+                    'HTTPS' => 'on'
+                ),
+                array(),
+                'https://example.com/',
+                'The url is expected to be https because of HTTPS on'
+            ),
+            array(
+                array(
+                    'REQUEST_URI' => '/',
+                    'HTTP_HOST' => 'example.com',
+                    'SERVER_PORT' => '443'
+                ),
+                array(),
+                'https://example.com/',
+                'The url is expected to be https because of the server port'
+            ),
+            array(
+                array(
+                    'REQUEST_URI' => '/',
+                    'HTTP_HOST' => 'example.com',
+                    'X-FORWARDED-PROTO' => 'https'
+                ),
+                array(),
+                'http://example.com/',
+                'The url is expected to be http because the X-Forwarded header is ignored'
+            ),
+            array(
+                array(
+                    'REQUEST_URI' => '/',
+                    'HTTP_HOST' => 'example.com',
+                    'X-FORWARDED-PROTO' => 'https'
+                ),
+                array('trust_x_forwarded_proto' => true),
+                'https://example.com/',
+                'The url is expected to be https because the X-Forwarded header is trusted'
+            )
+        );
     }
 }

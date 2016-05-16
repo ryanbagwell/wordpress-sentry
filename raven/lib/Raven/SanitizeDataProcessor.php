@@ -8,7 +8,7 @@
 class Raven_SanitizeDataProcessor extends Raven_Processor
 {
     const MASK = '********';
-    const FIELDS_RE = '/(authorization|password|passwd|secret|password_confirmation|card_number)/i';
+    const FIELDS_RE = '/(authorization|password|passwd|secret|password_confirmation|card_number|auth_pw)/i';
     const VALUES_RE = '/^(?:\d[ -]*?){13,16}$/';
 
     private $client;
@@ -19,7 +19,8 @@ class Raven_SanitizeDataProcessor extends Raven_Processor
     {
         $this->client       = $client;
         $this->fields_re    = self::FIELDS_RE;
-        $this->values_re   = self::VALUES_RE;
+        $this->values_re    = self::VALUES_RE;
+        $this->session_cookie_name = ini_get('session.name');
     }
 
     /**
@@ -27,12 +28,13 @@ class Raven_SanitizeDataProcessor extends Raven_Processor
      *
      * @param array $options    Associative array of processor options
      */
-    public function setProcessorOptions(array $options){
-        if( isset($options['fields_re']) ){
+    public function setProcessorOptions(array $options)
+    {
+        if (isset($options['fields_re'])) {
             $this->fields_re = $options['fields_re'];
         }
 
-        if( isset($options['values_re']) ){
+        if (isset($options['values_re'])) {
             $this->values_re = $options['values_re'];
         }
     }
@@ -62,9 +64,26 @@ class Raven_SanitizeDataProcessor extends Raven_Processor
         }
     }
 
+    public function sanitizeHttp(&$data)
+    {
+        if (empty($data['request'])) {
+            return;
+        }
+        $http = &$data['request'];
+        if (empty($http['cookies'])) {
+            return;
+        }
+
+        $cookies = &$http['cookies'];
+        if (!empty($cookies[$this->session_cookie_name])) {
+            $cookies[$this->session_cookie_name] = self::MASK;
+        }
+    }
+
     public function process(&$data)
     {
         array_walk_recursive($data, array($this, 'sanitize'));
+        $this->sanitizeHttp($data);
     }
 
     /**

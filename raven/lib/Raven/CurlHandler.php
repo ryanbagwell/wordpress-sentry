@@ -45,6 +45,8 @@ class Raven_CurlHandler
         foreach ($headers as $key => $value) {
             array_push($new_headers, $key .': '. $value);
         }
+        // XXX(dcramer): Prevent 100-continue response form server (Fixes GH-216)
+        $new_headers[] = 'Expect:';
 
         curl_setopt($ch, CURLOPT_HTTPHEADER, $new_headers);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -69,9 +71,9 @@ class Raven_CurlHandler
 
     public function join($timeout=null)
     {
-    	if (!isset($timeout)) {
-    		$timeout = $this->join_timeout;
-    	}
+        if (!isset($timeout)) {
+            $timeout = $this->join_timeout;
+        }
         $start = time();
         do {
             $this->select();
@@ -79,7 +81,7 @@ class Raven_CurlHandler
                 break;
             }
             usleep(10000);
-        } while ($timeout !== 0 && time() - $start > $timeout);
+        } while ($timeout !== 0 && time() - $start < $timeout);
     }
 
     // http://se2.php.net/manual/en/function.curl-multi-exec.php
@@ -94,8 +96,7 @@ class Raven_CurlHandler
                 do {
                     $mrc = curl_multi_exec($this->multi_handle, $active);
                 } while ($mrc == CURLM_CALL_MULTI_PERFORM);
-            }
-            else {
+            } else {
                 return;
             }
         }
