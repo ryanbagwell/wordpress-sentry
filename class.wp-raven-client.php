@@ -55,5 +55,3 @@ class WP_Raven_Client extends Raven_Client {
 	}
 
 }
-
-?>
