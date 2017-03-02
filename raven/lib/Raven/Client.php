@@ -16,7 +16,8 @@
 
 class Raven_Client
 {
-    const VERSION = '0.17.0';
+    const VERSION = '1.6.2';
+
     const PROTOCOL = '6';
 
     const DEBUG = 'debug';
@@ -28,10 +29,17 @@ class Raven_Client
 
     const MESSAGE_LIMIT = 1024;
 
-    public $severity_map;
+    public $breadcrumbs;
+    public $context;
     public $extra_data;
-
+    public $severity_map;
     public $store_errors_for_bulk_send = false;
+
+    protected $error_handler;
+    protected $error_types;
+
+    protected $serializer;
+    protected $reprSerializer;
 
     public function __construct($options_or_dsn=null, $options=array())
     {
@@ -69,37 +77,194 @@ class Raven_Client
         $this->message_limit = Raven_Util::get($options, 'message_limit', self::MESSAGE_LIMIT);
         $this->exclude = Raven_Util::get($options, 'exclude', array());
         $this->severity_map = null;
-        $this->shift_vars = (bool) Raven_Util::get($options, 'shift_vars', true);
         $this->http_proxy = Raven_Util::get($options, 'http_proxy');
         $this->extra_data = Raven_Util::get($options, 'extra', array());
         $this->send_callback = Raven_Util::get($options, 'send_callback', null);
         $this->curl_method = Raven_Util::get($options, 'curl_method', 'sync');
         $this->curl_path = Raven_Util::get($options, 'curl_path', 'curl');
-        $this->curl_ipv4 = Raven_util::get($options, 'curl_ipv4', true);
+        $this->curl_ipv4 = Raven_Util::get($options, 'curl_ipv4', true);
         $this->ca_cert = Raven_Util::get($options, 'ca_cert', $this->get_default_ca_cert());
         $this->verify_ssl = Raven_Util::get($options, 'verify_ssl', true);
         $this->curl_ssl_version = Raven_Util::get($options, 'curl_ssl_version');
         $this->trust_x_forwarded_proto = Raven_Util::get($options, 'trust_x_forwarded_proto');
-        // a list of prefixes used to coerce absolute paths into relative
-        $this->prefixes = Raven_Util::get($options, 'prefixes', null);
-        // app path is used to determine if code is part of your application
-        $this->app_path = Raven_Util::get($options, 'app_path', null);
+        $this->transport = Raven_Util::get($options, 'transport', null);
+        $this->mb_detect_order = Raven_Util::get($options, 'mb_detect_order', null);
+        $this->error_types = Raven_Util::get($options, 'error_types', null);
 
+        // app path is used to determine if code is part of your application
+        $this->setAppPath(Raven_Util::get($options, 'app_path', null));
+        $this->setExcludedAppPaths(Raven_Util::get($options, 'excluded_app_paths', null));
+        // a list of prefixes used to coerce absolute paths into relative
+        $this->setPrefixes(Raven_Util::get($options, 'prefixes', $this->getDefaultPrefixes()));
         $this->processors = $this->setProcessorsFromOptions($options);
 
         $this->_lasterror = null;
         $this->_last_event_id = null;
         $this->_user = null;
+        $this->_pending_events = array();
         $this->context = new Raven_Context();
         $this->breadcrumbs = new Raven_Breadcrumbs();
+
         $this->sdk = Raven_Util::get($options, 'sdk', array(
             'name' => 'sentry-php',
             'version' => self::VERSION,
         ));
+        $this->serializer = new Raven_Serializer($this->mb_detect_order);
+        $this->reprSerializer = new Raven_ReprSerializer($this->mb_detect_order);
 
         if ($this->curl_method == 'async') {
             $this->_curl_handler = new Raven_CurlHandler($this->get_curl_options());
         }
+
+        $this->transaction = new Raven_TransactionStack();
+        if ($this->is_http_request() && isset($_SERVER['PATH_INFO'])) {
+            $this->transaction->push($_SERVER['PATH_INFO']);
+        }
+
+        if (Raven_Util::get($options, 'install_default_breadcrumb_handlers', true)) {
+            $this->registerDefaultBreadcrumbHandlers();
+        }
+
+        register_shutdown_function(array($this, 'onShutdown'));
+    }
+
+    /**
+     * Installs any available automated hooks (such as error_reporting).
+     */
+    public function install()
+    {
+        if ($this->error_handler) {
+            throw new Raven_Exception(sprintf('%s->install() must only be called once', get_class($this)));
+        }
+        $this->error_handler = new Raven_ErrorHandler($this, false, $this->error_types);
+        $this->error_handler->registerExceptionHandler();
+        $this->error_handler->registerErrorHandler();
+        $this->error_handler->registerShutdownFunction();
+        return $this;
+    }
+
+    public function getRelease()
+    {
+        return $this->release;
+    }
+
+    public function setRelease($value)
+    {
+        $this->release = $value;
+        return $this;
+    }
+
+    public function getEnvironment()
+    {
+        return $this->environment;
+    }
+
+    public function setEnvironment($value)
+    {
+        $this->environment = $value;
+        return $this;
+    }
+
+    private function getDefaultPrefixes()
+    {
+        $value = get_include_path();
+        return explode(':', $value);
+    }
+
+    private function _convertPath($value)
+    {
+        $path = @realpath($value);
+        if ($path === false) {
+            $path = $value;
+        }
+        // we need app_path to have a trailing slash otherwise
+        // base path detection becomes complex if the same
+        // prefix is matched
+        if (substr($path, 0, 1) === '/' && substr($path, -1, 1) !== '/') {
+            $path = $path . '/';
+        }
+        return $path;
+    }
+
+    public function getAppPath()
+    {
+        return $this->app_path;
+    }
+
+    public function setAppPath($value)
+    {
+        if ($value) {
+            $this->app_path = $this->_convertPath($value);
+        } else {
+            $this->app_path = null;
+        }
+        return $this;
+    }
+
+    public function getExcludedAppPaths()
+    {
+        return $this->excluded_app_paths;
+    }
+
+    public function setExcludedAppPaths($value)
+    {
+        if ($value) {
+            $this->excluded_app_paths = $value ? array_map(array($this, '_convertPath'), $value) : $value;
+        } else {
+            $this->excluded_app_paths = null;
+        }
+        return $this;
+    }
+    public function getPrefixes()
+    {
+        return $this->prefixes;
+    }
+
+    public function setPrefixes($value)
+    {
+        $this->prefixes = $value ? array_map(array($this, '_convertPath'), $value) : $value;
+        return $this;
+    }
+
+    public function getSendCallback()
+    {
+        return $this->send_callback;
+    }
+
+    public function setSendCallback($value)
+    {
+        $this->send_callback = $value;
+        return $this;
+    }
+
+    public function getTransport()
+    {
+        return $this->transport;
+    }
+
+    public function getServerEndpoint($value)
+    {
+        return $this->server;
+    }
+
+    public function getUserAgent()
+    {
+        return 'sentry-php/' . self::VERSION;
+    }
+
+    /**
+     * Set a custom transport to override how Sentry events are sent upstream.
+     *
+     * The bound function will be called with ``$client`` and ``$data`` arguments
+     * and is responsible for encoding the data, authenticating, and sending
+     * the data to the upstream Sentry server.
+     *
+     * @param function     $value       Function to be called
+     */
+    public function setTransport($value)
+    {
+        $this->transport = $value;
+        return $this;
     }
 
     public static function getDefaultProcessors()
@@ -208,8 +373,12 @@ class Raven_Client
 
     /**
      * Log a message to sentry
+     *
+     * @param string $message The message (primary description) for the event.
+     * @param array $params params to use when formatting the message.
+     * @param array $data Additional attributes to pass with this event (see Sentry docs).
      */
-    public function captureMessage($message, $params=array(), $level_or_options=array(),
+    public function captureMessage($message, $params=array(), $data=array(),
                             $stack=false, $vars = null)
     {
         // Gracefully handle messages which contain formatting characters, but were not
@@ -220,20 +389,20 @@ class Raven_Client
             $formatted_message = $message;
         }
 
-        if ($level_or_options === null) {
+        if ($data === null) {
             $data = array();
-        } elseif (!is_array($level_or_options)) {
+        // support legacy method of passing in a level name as the third arg
+        } elseif (!is_array($data)) {
             $data = array(
-                'level' => $level_or_options,
+                'level' => $data,
             );
-        } else {
-            $data = $level_or_options;
         }
 
         $data['message'] = $formatted_message;
         $data['sentry.interfaces.Message'] = array(
             'message' => $message,
             'params' => $params,
+            'formatted' => $formatted_message,
         );
 
         return $this->capture($data, $stack, $vars);
@@ -241,8 +410,11 @@ class Raven_Client
 
     /**
      * Log an exception to sentry
+     *
+     * @param Exception $exception The Exception object.
+     * @param array $data Additional attributes to pass with this event (see Sentry docs).
      */
-    public function captureException($exception, $culprit_or_options=null, $logger=null, $vars=null)
+    public function captureException($exception, $data=null, $logger=null, $vars=null)
     {
         $has_chained_exceptions = version_compare(PHP_VERSION, '5.3.0', '>=');
 
@@ -250,27 +422,15 @@ class Raven_Client
             return null;
         }
 
-        if (!is_array($culprit_or_options)) {
+        if ($data === null) {
             $data = array();
-            if ($culprit_or_options !== null) {
-                $data['culprit'] = $culprit_or_options;
-            }
-        } else {
-            $data = $culprit_or_options;
-        }
-
-        // TODO(dcramer): DRY this up
-        $message = $exception->getMessage();
-        if (empty($message)) {
-            $message = get_class($exception);
         }
 
         $exc = $exception;
         do {
             $exc_data = array(
-                'value' => $exc->getMessage(),
+                'value' => $this->serializer->serialize($exc->getMessage()),
                 'type' => get_class($exc),
-                'module' => $exc->getFile() .':'. $exc->getLine(),
             );
 
             /**'exception'
@@ -292,15 +452,14 @@ class Raven_Client
 
             $exc_data['stacktrace'] = array(
                 'frames' => Raven_Stacktrace::get_stack_info(
-                    $trace, $this->trace, $this->shift_vars, $vars, $this->message_limit, $this->prefixes,
-                    $this->app_path
+                    $trace, $this->trace, $vars, $this->message_limit, $this->prefixes,
+                    $this->app_path, $this->excluded_app_paths, $this->serializer, $this->reprSerializer
                 ),
             );
 
             $exceptions[] = $exc_data;
         } while ($has_chained_exceptions && $exc = $exc->getPrevious());
 
-        $data['message'] = $message;
         $data['exception'] = array(
             'values' => array_reverse($exceptions),
         );
@@ -317,6 +476,24 @@ class Raven_Client
         }
 
         return $this->capture($data, $trace, $vars);
+    }
+
+
+    /**
+     * Capture the most recent error (obtained with ``error_get_last``).
+     */
+    public function captureLastError()
+    {
+        if (null === $error = error_get_last()) {
+            return;
+        }
+
+        $e = new ErrorException(
+            @$error['message'], 0, @$error['type'],
+            @$error['file'], @$error['line']
+        );
+
+        return $this->captureException($e);
     }
 
     /**
@@ -346,6 +523,12 @@ class Raven_Client
         return $this->_last_event_id;
     }
 
+    protected function registerDefaultBreadcrumbHandlers()
+    {
+        $handler = new Raven_Breadcrumbs_ErrorHandler($this);
+        $handler->install();
+    }
+
     protected function is_http_request()
     {
         return isset($_SERVER['REQUEST_METHOD']) && PHP_SAPI !== 'cli';
@@ -353,15 +536,13 @@ class Raven_Client
 
     protected function get_http_data()
     {
-        $env = $headers = array();
+        $headers = array();
 
         foreach ($_SERVER as $key => $value) {
             if (0 === strpos($key, 'HTTP_')) {
                 $headers[str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($key, 5)))))] = $value;
             } elseif (in_array($key, array('CONTENT_TYPE', 'CONTENT_LENGTH')) && $value !== '') {
                 $headers[str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', $key))))] = $value;
-            } else {
-                $env[$key] = $value;
             }
         }
 
@@ -382,9 +563,6 @@ class Raven_Client
         if (!empty($headers)) {
             $result['headers'] = $headers;
         }
-        if (!empty($env)) {
-            $result['env'] = $env;
-        }
 
         return array(
             'request' => $result,
@@ -395,7 +573,7 @@ class Raven_Client
     {
         $user = $this->context->user;
         if ($user === null) {
-            if (!session_id()) {
+            if (!function_exists('session_id') || !session_id()) {
                 return array();
             }
             $user = array(
@@ -425,6 +603,7 @@ class Raven_Client
             'tags' => $this->tags,
             'platform' => 'php',
             'sdk' => $this->sdk,
+            'culprit' => $this->transaction->peek(),
         );
     }
 
@@ -477,20 +656,15 @@ class Raven_Client
 
         if (empty($data['extra'])) {
             unset($data['extra']);
-        } else {
-            $data['extra'] = $data['extra'];
         }
-
         if (empty($data['tags'])) {
             unset($data['tags']);
-        } else {
-            $data['tags'] = $data['tags'];
         }
-        if (!empty($data['user'])) {
-            $data['user'] = $data['user'];
+        if (empty($data['user'])) {
+            unset($data['user']);
         }
-        if (!empty($data['request'])) {
-            $data['request'] = $data['request'];
+        if (empty($data['request'])) {
+            unset($data['request']);
         }
 
         if (!$this->breadcrumbs->is_empty()) {
@@ -513,8 +687,8 @@ class Raven_Client
             if (!isset($data['stacktrace']) && !isset($data['exception'])) {
                 $data['stacktrace'] = array(
                     'frames' => Raven_Stacktrace::get_stack_info(
-                        $stack, $this->trace, $this->shift_vars, $vars, $this->message_limit,
-                        $this->prefixes, $this->app_path
+                        $stack, $this->trace, $vars, $this->message_limit, $this->prefixes,
+                        $this->app_path, $this->excluded_app_paths, $this->serializer, $this->reprSerializer
                     ),
                 );
             }
@@ -526,10 +700,7 @@ class Raven_Client
         if (!$this->store_errors_for_bulk_send) {
             $this->send($data);
         } else {
-            if (empty($this->error_data)) {
-                $this->error_data = array();
-            }
-            $this->error_data[] = $data;
+            $this->_pending_events[] = $data;
         }
 
         $this->_last_event_id = $data['event_id'];
@@ -539,6 +710,24 @@ class Raven_Client
 
     public function sanitize(&$data)
     {
+        // attempt to sanitize any user provided data
+        if (!empty($data['request'])) {
+            $data['request'] = $this->serializer->serialize($data['request']);
+        }
+        if (!empty($data['user'])) {
+            $data['user'] = $this->serializer->serialize($data['user'], 3);
+        }
+        if (!empty($data['extra'])) {
+            $data['extra'] = $this->serializer->serialize($data['extra']);
+        }
+        if (!empty($data['tags'])) {
+            foreach ($data['tags'] as $key => $value) {
+                $data['tags'][$key] = @(string)$value;
+            }
+        }
+        if (!empty($data['contexts'])) {
+            $data['contexts'] = $this->serializer->serialize($data['contexts'], 5);
+        }
     }
 
     /**
@@ -555,16 +744,36 @@ class Raven_Client
 
     public function sendUnsentErrors()
     {
-        if (!empty($this->error_data)) {
-            foreach ($this->error_data as $data) {
-                $this->send($data);
-            }
-            unset($this->error_data);
+        foreach ($this->_pending_events as $data) {
+            $this->send($data);
         }
+        $this->_pending_events = array();
         if ($this->store_errors_for_bulk_send) {
             //in case an error occurs after this is called, on shutdown, send any new errors.
             $this->store_errors_for_bulk_send = !defined('RAVEN_CLIENT_END_REACHED');
         }
+    }
+
+    public function encode(&$data)
+    {
+        $message = Raven_Compat::json_encode($data);
+        if ($message === false) {
+            if (function_exists('json_last_error_msg')) {
+                $this->_lasterror = json_last_error_msg();
+            } else {
+                $this->_lasterror = json_last_error();
+            }
+            return false;
+        }
+
+        if (function_exists("gzcompress")) {
+            $message = gzcompress($message);
+        }
+
+        // PHP's builtin curl_* function are happy without this, but the exec method requires it
+        $message = base64_encode($message);
+
+        return $message;
     }
 
     /**
@@ -572,10 +781,10 @@ class Raven_Client
      *
      * @param array     $data       Associative array of data to log
      */
-    public function send($data)
+    public function send(&$data)
     {
-        if (is_callable($this->send_callback) && !call_user_func($this->send_callback, $data)) {
-            // if send_callback returns falsely, end native send
+        if (is_callable($this->send_callback) && call_user_func_array($this->send_callback, array(&$data)) === false) {
+            // if send_callback returns false, end native send
             return;
         }
 
@@ -583,20 +792,15 @@ class Raven_Client
             return;
         }
 
-        $message = Raven_Compat::json_encode($data);
-
-        if (function_exists("gzcompress")) {
-            $message = gzcompress($message);
+        if ($this->transport) {
+            return call_user_func($this->transport, $this, $data);
         }
-        $message = base64_encode($message); // PHP's builtin curl_* function are happy without this, but the exec method requires it
 
-        $client_string = 'sentry-php/' . self::VERSION;
-        $timestamp = microtime(true);
+        $message = $this->encode($data);
+
         $headers = array(
-            'User-Agent' => $client_string,
-            'X-Sentry-Auth' => $this->get_auth_header(
-                $timestamp, $client_string, $this->public_key,
-                $this->secret_key),
+            'User-Agent' => $this->getUserAgent(),
+            'X-Sentry-Auth' => $this->getAuthHeader(),
             'Content-Type' => 'application/octet-stream'
         );
 
@@ -679,6 +883,24 @@ class Raven_Client
         }
     }
 
+    protected function buildCurlCommand($url, $data, $headers)
+    {
+        // TODO(dcramer): support ca_cert
+        $cmd = $this->curl_path.' -X POST ';
+        foreach ($headers as $key => $value) {
+            $cmd .= '-H ' . escapeshellarg($key.': '.$value). ' ';
+        }
+        $cmd .= '-d ' . escapeshellarg($data) . ' ';
+        $cmd .= escapeshellarg($url) . ' ';
+        $cmd .= '-m 5 ';  // 5 second timeout for the whole process (connect + send)
+        if (!$this->verify_ssl) {
+            $cmd .= '-k ';
+        }
+        $cmd .= '> /dev/null 2>&1 &'; // ensure exec returns immediately while curl runs in the background
+
+        return $cmd;
+    }
+
     /**
      * Send the cURL to Sentry asynchronously. No errors will be returned from cURL
      *
@@ -689,21 +911,7 @@ class Raven_Client
      */
     private function send_http_asynchronous_curl_exec($url, $data, $headers)
     {
-        // TODO(dcramer): support ca_cert
-        $cmd = $this->curl_path.' -X POST ';
-        foreach ($headers as $key => $value) {
-            $cmd .= '-H \''. $key. ': '. $value. '\' ';
-        }
-        $cmd .= '-d \''. $data .'\' ';
-        $cmd .= '\''. $url .'\' ';
-        $cmd .= '-m 5 ';  // 5 second timeout for the whole process (connect + send)
-        if (!$this->verify_ssl) {
-            $cmd .= '-k ';
-        }
-        $cmd .= '> /dev/null 2>&1 &'; // ensure exec returns immediately while curl runs in the background
-
-        exec($cmd);
-
+        exec($this->buildCurlCommand($url, $data, $headers));
         return true; // The exec method is just fire and forget, so just assume it always works
     }
 
@@ -784,6 +992,12 @@ class Raven_Client
 
 
         return sprintf('Sentry %s', implode(', ', $header));
+    }
+
+    public function getAuthHeader()
+    {
+        $timestamp = microtime(true);
+        return $this->get_auth_header($timestamp, $this->getUserAgent(), $this->public_key, $this->secret_key);
     }
 
     /**
@@ -925,6 +1139,7 @@ class Raven_Client
     /**
      * Convenience function for setting a user's ID and Email
      *
+     * @deprecated
      * @param string $id            User's ID
      * @param string|null $email    User's email
      * @param array $data           Additional user data
@@ -938,14 +1153,34 @@ class Raven_Client
         $this->user_context(array_merge($user, $data));
     }
 
+    public function onShutdown()
+    {
+        if (!defined('RAVEN_CLIENT_END_REACHED')) {
+            define('RAVEN_CLIENT_END_REACHED', true);
+        }
+        $this->sendUnsentErrors();
+        if ($this->curl_method == 'async') {
+            $this->_curl_handler->join();
+        }
+    }
+
     /**
      * Sets user context.
      *
      * @param array $data   Associative array of user data
+     * @param bool $merge   Merge existing context with new context
      */
-    public function user_context($data)
+    public function user_context($data, $merge=true)
     {
-        $this->context->user = $data;
+        if ($merge && $this->context->user !== null) {
+            // bail if data is null
+            if (!$data) {
+                return;
+            }
+            $this->context->user = array_merge($this->context->user, $data);
+        } else {
+            $this->context->user = $data;
+        }
     }
 
     /**
